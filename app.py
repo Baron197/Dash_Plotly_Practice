@@ -32,11 +32,17 @@ disabledEsti = {
 
 app.title = 'Purwadhika Dash Plotly'; # set web title
 
+def getMaxAndMinBoundary(col) :
+    return {
+        'max': dfTips[col].mean() + dfTips[col].std(),
+        'min': dfTips[col].mean() - dfTips[col].std()
+    }
+
 # function to generate HTML Table
 def generate_table(dataframe, max_rows=10):
     return html.Table(
         # Header
-        [html.Tr([html.Th(col,className='table_dataset') for col in dataframe.columns])] +
+        [html.Tr([html.Th(col,className='table_dataset', style={ 'color': 'orange'}) for col in dataframe.columns])] +
 
         # Body
         [html.Tr([
@@ -178,6 +184,32 @@ app.layout = html.Div(children=[
                         }
                     )
                 ])
+            ]),
+            dcc.Tab(label='Histogram', value='tab-5', children=[
+                html.Div([
+                    html.H1('Histogram Tips Data Set'),
+                    html.Table([
+                        html.Tr([
+                            html.Td(html.P('Column : ')),
+                            html.Td([
+                                dcc.Dropdown(
+                                    id='ddl-col-histogram-plot',
+                                    options=[{'label': 'Total Bill', 'value': 'total_bill'},
+                                            {'label': 'Tip', 'value': 'tip'}],
+                                    value='total_bill'
+                                )
+                            ])
+                        ])        
+                    ],style={ 'width': '300px', 'paddingBottom': '20px' }),
+                    html.H4('', id='h4HistogramMin'),
+                    html.H4('', id='h4HistogramMax'),
+                    dcc.Graph(
+                        id='histogramPlot',
+                        figure={
+                            'data': []
+                        }
+                    )
+                ])
             ])
     ])
 ], 
@@ -185,6 +217,51 @@ style={
     'maxWidth': '1000px',
     'margin': '0 auto'
 });
+
+@app.callback(
+    Output('h4HistogramMin', 'children'),
+    [Input('ddl-col-histogram-plot','value')]
+)
+def update_h4Min_hist(col) :
+    return 'Batas Min : ' + str(getMaxAndMinBoundary(col)['min']);
+
+@app.callback(
+    Output('h4HistogramMax', 'children'),
+    [Input('ddl-col-histogram-plot','value')]
+)
+def update_h4Max_hist(col) :
+    return 'Batas Max : ' + str(getMaxAndMinBoundary(col)['max']);
+
+@app.callback(
+    Output('histogramPlot', 'figure'),
+    [Input('ddl-col-histogram-plot','value')]
+)
+def update_histogram_graph(col) :
+    return {
+        'data': [
+            go.Histogram(
+                x=dfTips[(dfTips[col] <= getMaxAndMinBoundary(col)['max']) & (dfTips[col] >= getMaxAndMinBoundary(col)['min'])][col],
+                marker=dict(
+                    color="blue"
+                ),
+                name="Normal",
+                opacity=0.7,
+            ),
+            go.Histogram(
+                x=dfTips[(dfTips[col] > getMaxAndMinBoundary(col)['max']) | (dfTips[col] < getMaxAndMinBoundary(col)['min'])][col],
+                marker=dict(
+                    color="orange"
+                ),
+                name="Not Normal",
+                opacity=0.7,
+            )
+        ],
+        'layout': go.Layout(
+            margin={'l': 40, 'b': 40, 't': 10, 'r': 10},
+            legend={'x': 1, 'y': 1},
+            xaxis={'title': col.capitalize()}, yaxis={'title': 'Transaction'},
+        )
+    };
 
 @app.callback(
     Output('ddl-col-pie-plot', 'disabled'),
