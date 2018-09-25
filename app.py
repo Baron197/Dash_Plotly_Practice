@@ -3,6 +3,7 @@ import dash_core_components as dcc
 import dash_html_components as html
 import pandas as pd
 import plotly.graph_objs as go
+from plotly import tools
 from dash.dependencies import Input, Output
 from categoryplot import dfTips, getPlot
 import numpy as np
@@ -30,6 +31,13 @@ disabledEsti = {
     'std': False
 }
 
+subplots_hist = {
+    'sex': [1,2],
+    'smoker': [1,2],
+    'time': [1,2],
+    'day': [2,2]
+}
+
 app.title = 'Purwadhika Dash Plotly'; # set web title
 
 def getMaxAndMinBoundary(col) :
@@ -42,7 +50,7 @@ def getMaxAndMinBoundary(col) :
 def generate_table(dataframe, max_rows=10):
     return html.Table(
         # Header
-        [html.Tr([html.Th(col,className='table_dataset', style={ 'color': 'orange'}) for col in dataframe.columns])] +
+        [html.Tr([html.Th(col,className='table_dataset') for col in dataframe.columns])] +
 
         # Body
         [html.Tr([
@@ -199,10 +207,22 @@ app.layout = html.Div(children=[
                                     value='total_bill'
                                 )
                             ])
+                        ]),
+                        html.Tr([
+                            html.Td(html.P('Hue : ')),
+                            html.Td([
+                                dcc.Dropdown(
+                                    id='ddl-hue-histogram-plot',
+                                    options=[{'label': 'Sex', 'value': 'sex'},
+                                            {'label': 'Smoker', 'value': 'smoker'},
+                                            {'label': 'Day', 'value': 'day'},
+                                            {'label': 'Time', 'value': 'time'}],
+                                    value='sex'
+                                )
+                            ])
                         ])        
                     ],style={ 'width': '300px', 'paddingBottom': '20px' }),
-                    html.H4('', id='h4HistogramMin'),
-                    html.H4('', id='h4HistogramMax'),
+                    html.Div('', id='divH4Hist'),
                     dcc.Graph(
                         id='histogramPlot',
                         figure={
@@ -219,49 +239,57 @@ style={
 });
 
 @app.callback(
-    Output('h4HistogramMin', 'children'),
+    Output('divH4Hist', 'children'),
     [Input('ddl-col-histogram-plot','value')]
 )
-def update_h4Min_hist(col) :
-    return 'Batas Min : ' + str(getMaxAndMinBoundary(col)['min']);
-
-@app.callback(
-    Output('h4HistogramMax', 'children'),
-    [Input('ddl-col-histogram-plot','value')]
-)
-def update_h4Max_hist(col) :
-    return 'Batas Max : ' + str(getMaxAndMinBoundary(col)['max']);
+def update_divh4_hist(col) :
+    return [html.H4('Batas Min : ' + str(getMaxAndMinBoundary(col)['min'])),
+            html.H4('Batas Max : ' + str(getMaxAndMinBoundary(col)['max']))];
 
 @app.callback(
     Output('histogramPlot', 'figure'),
-    [Input('ddl-col-histogram-plot','value')]
+    [Input('ddl-col-histogram-plot','value'),
+    Input('ddl-hue-histogram-plot','value')]
 )
-def update_histogram_graph(col) :
-    return {
-        'data': [
+def update_histogram_graph(col, hue) :
+    jmlrow,jmlcol = subplots_hist[hue][0],subplots_hist[hue][1];
+    fig = tools.make_subplots(rows=jmlrow, 
+                            cols=jmlcol,
+                            subplot_titles=dfTips[hue].unique())
+    r,c = 1,1;
+    sLegend = True;
+    for item,index in zip(dfTips[hue].unique(), range(1, dfTips[hue].nunique()+1)) :
+        fig.append_trace(
             go.Histogram(
-                x=dfTips[(dfTips[col] <= getMaxAndMinBoundary(col)['max']) & (dfTips[col] >= getMaxAndMinBoundary(col)['min'])][col],
+                x=dfTips[(dfTips[hue] == item) & (dfTips[col] <= getMaxAndMinBoundary(col)['max']) & (dfTips[col] >= getMaxAndMinBoundary(col)['min'])][col],
                 marker=dict(
-                    color="blue"
+                    color="green"
                 ),
                 name="Normal",
                 opacity=0.7,
-            ),
+                showlegend=sLegend
+            ), r,c)
+        fig.append_trace(
             go.Histogram(
-                x=dfTips[(dfTips[col] > getMaxAndMinBoundary(col)['max']) | (dfTips[col] < getMaxAndMinBoundary(col)['min'])][col],
+                x=dfTips[(dfTips[hue] == item) & (dfTips[col] > getMaxAndMinBoundary(col)['max']) | (dfTips[col] < getMaxAndMinBoundary(col)['min'])][col],
                 marker=dict(
-                    color="orange"
+                    color="red"
                 ),
                 name="Not Normal",
                 opacity=0.7,
-            )
-        ],
-        'layout': go.Layout(
-            margin={'l': 40, 'b': 40, 't': 10, 'r': 10},
-            legend={'x': 1, 'y': 1},
-            xaxis={'title': col.capitalize()}, yaxis={'title': 'Transaction'},
-        )
-    };
+                showlegend=sLegend
+            ), r, c)
+        fig['layout']['xaxis'+str(index)].update(title=col.capitalize())
+        fig['layout']['yaxis'+str(index)].update(title='Total Transaction')
+        c += 1;
+        sLegend = False;
+        if(c > jmlcol) :
+            c = 1;
+            r += 1;
+    
+    fig['layout'].update(height=600, width=900,
+                     title='Histogram ' + col.capitalize())
+    return fig;
 
 @app.callback(
     Output('ddl-col-pie-plot', 'disabled'),
